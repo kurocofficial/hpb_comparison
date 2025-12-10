@@ -9,8 +9,8 @@ import re
 from typing import Optional
 from dataclasses import dataclass
 
-from google import genai
-from google.genai.types import Tool, GenerateContentConfig
+import google.genai as genai
+from google.genai.types import GenerateContentConfig
 from prompts.analysis_prompts import (
     SALON_ANALYSIS_PROMPT,
     COMPARISON_PROMPT,
@@ -58,7 +58,7 @@ class HPBAnalyzer:
             raise ValueError("GEMINI_API_KEY is required")
 
         self.client = genai.Client(api_key=self.api_key)
-        self.model_id = "gemini-2.0-flash"
+        self.model_id = "gemini-2.5-flash"
         self.url_context_tools = [{"url_context": {}}]
 
     def analyze_salon(self, url: str, is_my_salon: bool = False) -> SalonScore:
@@ -82,13 +82,19 @@ class HPBAnalyzer:
         response = self.client.models.generate_content(
             model=self.model_id,
             contents=full_prompt,
-            config=GenerateContentConfig(tools=self.url_context_tools)
+            config=GenerateContentConfig(
+                tools=self.url_context_tools
+            )
         )
 
+        # レスポンスからテキストを取得
         response_text = ""
-        for part in response.candidates[0].content.parts:
-            if hasattr(part, 'text'):
-                response_text += part.text
+        if hasattr(response, 'text') and response.text:
+            response_text = response.text
+        elif hasattr(response, 'candidates') and response.candidates:
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'text'):
+                    response_text += part.text
 
         return self._parse_salon_response(response_text, url)
 
@@ -150,12 +156,17 @@ class HPBAnalyzer:
             contents=prompt
         )
 
-        response_text = ""
-        for part in response.candidates[0].content.parts:
-            if hasattr(part, 'text'):
-                response_text += part.text
+        # レスポンスからテキストを取得
+        if hasattr(response, 'text') and response.text:
+            return response.text
+        elif hasattr(response, 'candidates') and response.candidates:
+            response_text = ""
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'text'):
+                    response_text += part.text
+            return response_text
 
-        return response_text
+        return "回答を生成できませんでした。"
 
     def _parse_salon_response(self, response_text: str, url: str) -> SalonScore:
         """
@@ -248,11 +259,14 @@ class HPBAnalyzer:
             contents=prompt
         )
 
-        # 応答をパース
+        # レスポンスからテキストを取得
         response_text = ""
-        for part in response.candidates[0].content.parts:
-            if hasattr(part, 'text'):
-                response_text += part.text
+        if hasattr(response, 'text') and response.text:
+            response_text = response.text
+        elif hasattr(response, 'candidates') and response.candidates:
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'text'):
+                    response_text += part.text
 
         # 推奨事項を抽出
         recommendations = []
