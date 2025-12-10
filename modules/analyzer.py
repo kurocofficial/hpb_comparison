@@ -10,6 +10,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 import google.generativeai as genai
+from google.generativeai.types import content_types
 from prompts.analysis_prompts import (
     SALON_ANALYSIS_PROMPT,
     COMPARISON_PROMPT,
@@ -57,7 +58,8 @@ class HPBAnalyzer:
             raise ValueError("GEMINI_API_KEY is required")
 
         genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel("gemini-2.0-flash")
+        # gemini-2.0-flash-exp supports URL context
+        self.model = genai.GenerativeModel("gemini-2.0-flash-exp")
 
     def analyze_salon(self, url: str, is_my_salon: bool = False) -> SalonScore:
         """
@@ -74,9 +76,15 @@ class HPBAnalyzer:
             salon_type="自店舗" if is_my_salon else "競合店舗"
         )
 
+        # URL Contextを使用してページを解析
+        # Gemini 2.0ではfile_dataでURLを渡す
         response = self.model.generate_content([
-            prompt,
-            {"url": url}
+            {
+                "parts": [
+                    {"text": prompt},
+                    {"file_data": {"file_uri": url, "mime_type": "text/html"}}
+                ]
+            }
         ])
 
         return self._parse_salon_response(response.text, url)
