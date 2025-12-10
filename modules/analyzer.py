@@ -9,8 +9,8 @@ import re
 from typing import Optional
 from dataclasses import dataclass
 
-import google.generativeai as genai
-from google.generativeai.types import content_types
+from google import genai
+from google.genai.types import Tool, GenerateContentConfig
 from prompts.analysis_prompts import (
     SALON_ANALYSIS_PROMPT,
     COMPARISON_PROMPT,
@@ -57,9 +57,9 @@ class HPBAnalyzer:
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY is required")
 
-        genai.configure(api_key=self.api_key)
-        # gemini-2.0-flash-exp supports URL context
-        self.model = genai.GenerativeModel("gemini-2.0-flash-exp")
+        self.client = genai.Client(api_key=self.api_key)
+        self.model_id = "gemini-2.0-flash"
+        self.url_context_tools = [{"url_context": {}}]
 
     def analyze_salon(self, url: str, is_my_salon: bool = False) -> SalonScore:
         """
@@ -76,18 +76,21 @@ class HPBAnalyzer:
             salon_type="自店舗" if is_my_salon else "競合店舗"
         )
 
-        # URL Contextを使用してページを解析
-        # Gemini 2.0ではfile_dataでURLを渡す
-        response = self.model.generate_content([
-            {
-                "parts": [
-                    {"text": prompt},
-                    {"file_data": {"file_uri": url, "mime_type": "text/html"}}
-                ]
-            }
-        ])
+        # URL Contextツールを使用してページを解析
+        full_prompt = f"{prompt}\n\n分析対象URL: {url}"
 
-        return self._parse_salon_response(response.text, url)
+        response = self.client.models.generate_content(
+            model=self.model_id,
+            contents=full_prompt,
+            config=GenerateContentConfig(tools=self.url_context_tools)
+        )
+
+        response_text = ""
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'text'):
+                response_text += part.text
+
+        return self._parse_salon_response(response_text, url)
 
     def compare_salons(
         self,
@@ -142,8 +145,17 @@ class HPBAnalyzer:
             question=question
         )
 
-        response = self.model.generate_content(prompt)
-        return response.text
+        response = self.client.models.generate_content(
+            model=self.model_id,
+            contents=prompt
+        )
+
+        response_text = ""
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'text'):
+                response_text += part.text
+
+        return response_text
 
     def _parse_salon_response(self, response_text: str, url: str) -> SalonScore:
         """
@@ -230,10 +242,17 @@ class HPBAnalyzer:
 """
 
         prompt = COMPARISON_PROMPT.format(scores_context=context)
-        response = self.model.generate_content(prompt)
+
+        response = self.client.models.generate_content(
+            model=self.model_id,
+            contents=prompt
+        )
 
         # 応答をパース
-        response_text = response.text
+        response_text = ""
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'text'):
+                response_text += part.text
 
         # 推奨事項を抽出
         recommendations = []
