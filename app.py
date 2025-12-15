@@ -233,8 +233,8 @@ def _build_context(result: ComparisonResult) -> str:
     """チャット用コンテキストを構築"""
     context = f"""
 自店舗: {result.my_salon.name}
-- PV獲得力: {result.my_salon.pv_score}/5
-- CV転換力: {result.my_salon.cv_score}/5
+- 集客力: {result.my_salon.pv_score}/5
+- 予約力: {result.my_salon.cv_score}/5
 - 価格競争力: {result.my_salon.price_score}/5
 - 差別化: {result.my_salon.diff_score}/5
 - 総合スコア: {result.my_salon.total_score}/5
@@ -247,8 +247,8 @@ def _build_context(result: ComparisonResult) -> str:
     for i, comp in enumerate(result.competitors, 1):
         context += f"""
 競合{i}: {comp.name}
-- PV獲得力: {comp.pv_score}/5
-- CV転換力: {comp.cv_score}/5
+- 集客力: {comp.pv_score}/5
+- 予約力: {comp.cv_score}/5
 - 価格競争力: {comp.price_score}/5
 - 差別化: {comp.diff_score}/5
 - 総合スコア: {comp.total_score}/5
@@ -274,7 +274,7 @@ def render_result_page():
             st.rerun()
 
     # タブ
-    tab1, tab2, tab3 = st.tabs(["📈 スコア", "💬 AI相談", "📥 レポート"])
+    tab1, tab2, tab3 = st.tabs(["📈 スコア", "💬 AI相談", "📄 レポート"])
 
     with tab1:
         render_score_tab(result)
@@ -290,6 +290,50 @@ def render_score_tab(result: ComparisonResult):
     """スコアタブをレンダリング"""
     my_salon = result.my_salon
 
+    # チェック項目の定義（厳しめ基準）
+    SCORING_CRITERIA = {
+        "pv": {
+            "name": "集客力",
+            "items": {
+                "1-1": "キャッチコピーが独自性あり（○○専門など）",
+                "1-2": "メイン写真がプロ撮影レベル",
+                "1-3": "ギャラリー写真30枚以上",
+                "1-4": "口コミ3,000件以上",
+                "1-5": "口コミ評価4.9以上",
+            }
+        },
+        "cv": {
+            "name": "予約力",
+            "items": {
+                "2-1": "クーポン10種類以上・割引率40%以上",
+                "2-2": "強い緊急性訴求（本日空き・残り○枠等）",
+                "2-3": "全メニューに詳細説明あり",
+                "2-4": "ビフォーアフター写真10組以上",
+                "2-5": "口コミ返信率80%以上・丁寧な対応",
+            }
+        },
+        "price": {
+            "name": "価格競争力",
+            "items": {
+                "3-1": "競合より20%以上安い",
+                "3-2": "初回割引50%以上または高額特典",
+                "3-3": "セットメニュー3つ以上・30%以上お得",
+                "3-4": "全メニュー税込・追加料金明記",
+                "3-5": "施術時間・内容が競合より充実",
+            }
+        },
+        "diff": {
+            "name": "差別化",
+            "items": {
+                "4-1": "エリアで唯一/希少な専門性",
+                "4-2": "ターゲット層が具体的で最適化",
+                "4-3": "資格・受賞歴・有名店出身の権威性",
+                "4-4": "独自メニュー・オリジナル技術・特別設備",
+                "4-5": "メディア掲載・SNS1万人以上の外部評価",
+            }
+        }
+    }
+
     # 総合スコア
     st.markdown('<div class="section-header">総合スコア</div>', unsafe_allow_html=True)
 
@@ -298,10 +342,29 @@ def render_score_tab(result: ComparisonResult):
         gauge = create_total_score_gauge(my_salon.total_score, my_salon.name)
         st.plotly_chart(gauge, use_container_width=True)
     with col2:
-        st.metric("PV獲得力", f"{'★' * my_salon.pv_score}{'☆' * (5 - my_salon.pv_score)}")
-        st.metric("CV転換力", f"{'★' * my_salon.cv_score}{'☆' * (5 - my_salon.cv_score)}")
+        st.metric("集客力", f"{'★' * my_salon.pv_score}{'☆' * (5 - my_salon.pv_score)}")
+        st.metric("予約力", f"{'★' * my_salon.cv_score}{'☆' * (5 - my_salon.cv_score)}")
         st.metric("価格競争力", f"{'★' * my_salon.price_score}{'☆' * (5 - my_salon.price_score)}")
         st.metric("差別化", f"{'★' * my_salon.diff_score}{'☆' * (5 - my_salon.diff_score)}")
+
+    # 採点詳細
+    st.markdown('<div class="section-header">採点詳細</div>', unsafe_allow_html=True)
+
+    score_details = {
+        "pv": (my_salon.pv_score, my_salon.pv_details or []),
+        "cv": (my_salon.cv_score, my_salon.cv_details or []),
+        "price": (my_salon.price_score, my_salon.price_details or []),
+        "diff": (my_salon.diff_score, my_salon.diff_details or []),
+    }
+
+    for key, (score, details) in score_details.items():
+        criteria = SCORING_CRITERIA[key]
+        with st.expander(f"{criteria['name']}: {score}/5点"):
+            for item_id, item_label in criteria["items"].items():
+                if item_id in details:
+                    st.markdown(f"✅ {item_label}")
+                else:
+                    st.markdown(f"❌ {item_label}")
 
     # 比較チャート
     if result.competitors:
@@ -401,81 +464,185 @@ def render_chat_tab(result: ComparisonResult):
 
 def render_report_tab(result: ComparisonResult):
     """レポート出力タブをレンダリング"""
-    st.markdown('<div class="section-header">PDFレポート出力</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">レポート出力</div>', unsafe_allow_html=True)
 
-    st.markdown("分析結果をPDFレポートとしてダウンロードできます")
+    st.markdown("分析結果をPDFまたはテキストレポートとしてダウンロードできます")
 
-    if st.button("📥 PDFを生成", type="primary", use_container_width=True):
-        with st.spinner("PDF生成中..."):
-            try:
-                # チャート画像を生成
-                my_scores = {
-                    'name': result.my_salon.name,
-                    'pv': result.my_salon.pv_score,
-                    'cv': result.my_salon.cv_score,
-                    'price': result.my_salon.price_score,
-                    'diff': result.my_salon.diff_score,
-                    'total': result.my_salon.total_score
+    # PDFレポート生成
+    my = result.my_salon
+    my_salon_data = {
+        'name': my.name,
+        'pv': my.pv_score,
+        'cv': my.cv_score,
+        'price': my.price_score,
+        'diff': my.diff_score,
+        'total': my.total_score,
+        'strengths': my.strengths,
+        'weaknesses': my.weaknesses,
+    }
+
+    competitor_data = [{
+        'name': c.name,
+        'pv': c.pv_score,
+        'cv': c.cv_score,
+        'price': c.price_score,
+        'diff': c.diff_score,
+        'total': c.total_score,
+    } for c in result.competitors]
+
+    try:
+        pdf_bytes = generate_pdf_report(
+            my_salon_data=my_salon_data,
+            competitor_data=competitor_data,
+            comparison_summary=result.comparison_summary,
+            recommendations=my.improvements[:5],
+        )
+
+        st.download_button(
+            label="📑 PDFレポートをダウンロード",
+            data=pdf_bytes,
+            file_name="hpb_analysis_report.pdf",
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
+    except Exception as e:
+        st.warning(f"PDF生成に失敗しました: {str(e)}")
+
+    st.markdown("---")
+
+    # テキストレポート生成
+    def generate_text_report() -> str:
+        my = result.my_salon
+        lines = []
+        lines.append("=" * 50)
+        lines.append("HPB分析レポート")
+        lines.append("=" * 50)
+        lines.append("")
+        lines.append(f"■ サロン名: {my.name}")
+        lines.append(f"■ URL: {my.url}")
+        lines.append("")
+        lines.append("-" * 50)
+        lines.append("【スコア】")
+        lines.append("-" * 50)
+        lines.append(f"  集客力:     {'★' * my.pv_score}{'☆' * (5 - my.pv_score)} ({my.pv_score}/5)")
+        lines.append(f"  予約力:     {'★' * my.cv_score}{'☆' * (5 - my.cv_score)} ({my.cv_score}/5)")
+        lines.append(f"  価格競争力: {'★' * my.price_score}{'☆' * (5 - my.price_score)} ({my.price_score}/5)")
+        lines.append(f"  差別化:     {'★' * my.diff_score}{'☆' * (5 - my.diff_score)} ({my.diff_score}/5)")
+        lines.append(f"  ─────────────────────")
+        lines.append(f"  総合スコア: {my.total_score}/5")
+        lines.append("")
+
+        # 採点詳細
+        lines.append("-" * 50)
+        lines.append("【採点詳細】")
+        lines.append("-" * 50)
+
+        criteria = {
+            "集客力": {
+                "details": my.pv_details or [],
+                "items": {
+                    "1-1": "キャッチコピーが独自性あり",
+                    "1-2": "メイン写真がプロ撮影レベル",
+                    "1-3": "ギャラリー写真30枚以上",
+                    "1-4": "口コミ3,000件以上",
+                    "1-5": "口コミ評価4.9以上",
                 }
-
-                comp_scores = [{
-                    'name': c.name,
-                    'pv': c.pv_score,
-                    'cv': c.cv_score,
-                    'price': c.price_score,
-                    'diff': c.diff_score,
-                    'total': c.total_score
-                } for c in result.competitors]
-
-                radar = create_radar_chart(my_scores, comp_scores)
-                bar = create_comparison_bar_chart(my_scores, comp_scores)
-
-                radar_img = radar.to_image(format="png", width=800, height=500)
-                bar_img = bar.to_image(format="png", width=800, height=450)
-
-                # サロンデータを辞書に変換
-                my_data = {
-                    'name': result.my_salon.name,
-                    'pv': result.my_salon.pv_score,
-                    'cv': result.my_salon.cv_score,
-                    'price': result.my_salon.price_score,
-                    'diff': result.my_salon.diff_score,
-                    'total': result.my_salon.total_score,
-                    'strengths': result.my_salon.strengths,
-                    'weaknesses': result.my_salon.weaknesses,
+            },
+            "予約力": {
+                "details": my.cv_details or [],
+                "items": {
+                    "2-1": "クーポン10種類以上・割引率40%以上",
+                    "2-2": "強い緊急性訴求",
+                    "2-3": "全メニューに詳細説明",
+                    "2-4": "ビフォーアフター写真10組以上",
+                    "2-5": "口コミ返信率80%以上",
                 }
+            },
+            "価格競争力": {
+                "details": my.price_details or [],
+                "items": {
+                    "3-1": "競合より20%以上安い",
+                    "3-2": "初回割引50%以上",
+                    "3-3": "セットメニュー3つ以上",
+                    "3-4": "全メニュー税込・追加料金明記",
+                    "3-5": "施術時間・内容が充実",
+                }
+            },
+            "差別化": {
+                "details": my.diff_details or [],
+                "items": {
+                    "4-1": "エリアで唯一/希少な専門性",
+                    "4-2": "ターゲット層が具体的",
+                    "4-3": "資格・受賞歴の権威性",
+                    "4-4": "独自メニュー・技術",
+                    "4-5": "メディア掲載・SNS1万人以上",
+                }
+            },
+        }
 
-                comp_data = [{
-                    'name': c.name,
-                    'pv': c.pv_score,
-                    'cv': c.cv_score,
-                    'price': c.price_score,
-                    'diff': c.diff_score,
-                    'total': c.total_score,
-                } for c in result.competitors]
+        for cat_name, cat_data in criteria.items():
+            lines.append(f"\n  《{cat_name}》")
+            for item_id, item_label in cat_data["items"].items():
+                mark = "✓" if item_id in cat_data["details"] else "✗"
+                lines.append(f"    [{mark}] {item_label}")
 
-                # PDF生成
-                pdf_bytes = generate_pdf_report(
-                    my_data,
-                    comp_data,
-                    result.comparison_summary,
-                    result.recommendations,
-                    radar_img,
-                    bar_img
-                )
+        lines.append("")
+        lines.append("-" * 50)
+        lines.append("【強み】")
+        lines.append("-" * 50)
+        for i, s in enumerate(my.strengths[:5], 1):
+            lines.append(f"  {i}. {s}")
 
-                st.download_button(
-                    label="📄 PDFをダウンロード",
-                    data=pdf_bytes,
-                    file_name="hpb_analysis_report.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
+        lines.append("")
+        lines.append("-" * 50)
+        lines.append("【改善点】")
+        lines.append("-" * 50)
+        for i, w in enumerate(my.weaknesses[:5], 1):
+            lines.append(f"  {i}. {w}")
 
-                st.success("PDF生成完了！上のボタンからダウンロードできます")
+        lines.append("")
+        lines.append("-" * 50)
+        lines.append("【改善提案】")
+        lines.append("-" * 50)
+        for i, imp in enumerate(my.improvements[:5], 1):
+            lines.append(f"  {i}. {imp}")
 
-            except Exception as e:
-                st.error(f"PDF生成エラー: {str(e)}")
+        # 競合比較
+        if result.competitors:
+            lines.append("")
+            lines.append("=" * 50)
+            lines.append("【競合比較】")
+            lines.append("=" * 50)
+            for i, comp in enumerate(result.competitors, 1):
+                lines.append(f"\n  ▼ 競合{i}: {comp.name}")
+                lines.append(f"    集客力: {comp.pv_score}/5 | 予約力: {comp.cv_score}/5")
+                lines.append(f"    価格競争力: {comp.price_score}/5 | 差別化: {comp.diff_score}/5")
+                lines.append(f"    総合: {comp.total_score}/5")
+
+        lines.append("")
+        lines.append("-" * 50)
+        lines.append("【比較分析サマリー】")
+        lines.append("-" * 50)
+        lines.append(result.comparison_summary)
+
+        lines.append("")
+        lines.append("=" * 50)
+        lines.append("Generated by HPB分析ツール")
+        lines.append("=" * 50)
+
+        return "\n".join(lines)
+
+    report_text = generate_text_report()
+
+    st.download_button(
+        label="📄 レポートをダウンロード",
+        data=report_text.encode('utf-8'),
+        file_name="hpb_analysis_report.txt",
+        mime="text/plain",
+        type="primary",
+        use_container_width=True
+    )
 
     # 比較サマリー表示
     st.markdown("---")

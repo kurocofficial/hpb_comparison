@@ -145,9 +145,9 @@ def generate_pdf_report(
     # スコアテーブル
     score_data = [
         ['評価項目', '自店舗'] + [f"競合{i+1}" for i in range(len(competitor_data))],
-        ['PV獲得力', _score_stars(my_salon_data.get('pv', 0))] +
+        ['集客力', _score_stars(my_salon_data.get('pv', 0))] +
         [_score_stars(c.get('pv', 0)) for c in competitor_data],
-        ['CV転換力', _score_stars(my_salon_data.get('cv', 0))] +
+        ['予約力', _score_stars(my_salon_data.get('cv', 0))] +
         [_score_stars(c.get('cv', 0)) for c in competitor_data],
         ['価格競争力', _score_stars(my_salon_data.get('price', 0))] +
         [_score_stars(c.get('price', 0)) for c in competitor_data],

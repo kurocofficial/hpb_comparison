@@ -32,6 +32,11 @@ class SalonScore:
     weaknesses: list[str]  # 弱み
     improvements: list[str]  # 改善提案
     raw_analysis: str  # 生の分析結果
+    # 採点詳細（該当したチェック項目）
+    pv_details: list[str] = None
+    cv_details: list[str] = None
+    price_details: list[str] = None
+    diff_details: list[str] = None
 
 
 @dataclass
@@ -196,7 +201,11 @@ class HPBAnalyzer:
                     strengths=data.get("strengths", []),
                     weaknesses=data.get("weaknesses", []),
                     improvements=data.get("improvements", []),
-                    raw_analysis=response_text
+                    raw_analysis=response_text,
+                    pv_details=data.get("pv_details", []),
+                    cv_details=data.get("cv_details", []),
+                    price_details=data.get("price_details", []),
+                    diff_details=data.get("diff_details", [])
                 )
             except (json.JSONDecodeError, KeyError, ValueError):
                 pass
@@ -213,7 +222,11 @@ class HPBAnalyzer:
             strengths=["解析結果を取得中"],
             weaknesses=["解析結果を取得中"],
             improvements=["解析結果を取得中"],
-            raw_analysis=response_text
+            raw_analysis=response_text,
+            pv_details=[],
+            cv_details=[],
+            price_details=[],
+            diff_details=[]
         )
 
     def _generate_comparison(
@@ -234,8 +247,8 @@ class HPBAnalyzer:
         # 比較用のコンテキスト作成
         context = f"""
 自店舗: {my_salon.name}
-- PV獲得力: {my_salon.pv_score}/5
-- CV転換力: {my_salon.cv_score}/5
+- 集客力: {my_salon.pv_score}/5
+- 予約力: {my_salon.cv_score}/5
 - 価格競争力: {my_salon.price_score}/5
 - 差別化: {my_salon.diff_score}/5
 - 総合: {my_salon.total_score}/5
@@ -244,8 +257,8 @@ class HPBAnalyzer:
         for i, comp in enumerate(competitors, 1):
             context += f"""
 競合{i}: {comp.name}
-- PV獲得力: {comp.pv_score}/5
-- CV転換力: {comp.cv_score}/5
+- 集客力: {comp.pv_score}/5
+- 予約力: {comp.cv_score}/5
 - 価格競争力: {comp.price_score}/5
 - 差別化: {comp.diff_score}/5
 - 総合: {comp.total_score}/5
