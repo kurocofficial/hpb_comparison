@@ -466,9 +466,10 @@ def render_report_tab(result: ComparisonResult):
     """レポート出力タブをレンダリング"""
     st.markdown('<div class="section-header">レポート出力</div>', unsafe_allow_html=True)
 
-    st.markdown("分析結果をPDFまたはテキストレポートとしてダウンロードできます")
+    # PDFレポートセクション
+    st.markdown("**📑 PDFレポート**")
+    st.markdown("グラフ付きの見やすいPDF形式でダウンロードできます")
 
-    # PDFレポート生成
     my = result.my_salon
     my_salon_data = {
         'name': my.name,
@@ -499,17 +500,24 @@ def render_report_tab(result: ComparisonResult):
         )
 
         st.download_button(
-            label="📑 PDFレポートをダウンロード",
+            label="PDFをダウンロード",
             data=pdf_bytes,
             file_name="hpb_analysis_report.pdf",
             mime="application/pdf",
             type="primary",
-            use_container_width=True
+            use_container_width=True,
+            key="pdf_download"
         )
     except Exception as e:
         st.warning(f"PDF生成に失敗しました: {str(e)}")
 
+    st.markdown("")
     st.markdown("---")
+    st.markdown("")
+
+    # テキストレポートセクション
+    st.markdown("**📄 テキストレポート**")
+    st.markdown("シンプルなテキスト形式でダウンロードできます")
 
     # テキストレポート生成
     def generate_text_report() -> str:
@@ -636,12 +644,12 @@ def render_report_tab(result: ComparisonResult):
     report_text = generate_text_report()
 
     st.download_button(
-        label="📄 レポートをダウンロード",
+        label="テキストをダウンロード",
         data=report_text.encode('utf-8'),
         file_name="hpb_analysis_report.txt",
         mime="text/plain",
-        type="primary",
-        use_container_width=True
+        use_container_width=True,
+        key="text_download"
     )
 
     # 比較サマリー表示

@@ -5,8 +5,12 @@ ReportLabを使用して日本語対応PDFレポートを生成
 
 import io
 import os
+import urllib.request
+import zipfile
+import tempfile
 from datetime import datetime
 from typing import Optional
+from pathlib import Path
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -25,8 +29,30 @@ from reportlab.platypus import (
 )
 
 
+# フォントキャッシュディレクトリ
+FONT_CACHE_DIR = Path(tempfile.gettempdir()) / "hpb_fonts"
+NOTO_SANS_JP_URL = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Regular.ttf"
+
+
+def download_noto_sans_jp() -> Optional[str]:
+    """Noto Sans JPフォントをダウンロード"""
+    try:
+        FONT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        font_path = FONT_CACHE_DIR / "NotoSansJP-Regular.ttf"
+
+        if font_path.exists():
+            return str(font_path)
+
+        # フォントをダウンロード
+        urllib.request.urlretrieve(NOTO_SANS_JP_URL, font_path)
+        return str(font_path)
+    except Exception:
+        return None
+
+
 def register_japanese_font():
     """日本語フォントを登録"""
+    # まずローカルのフォントを確認
     font_paths = [
         # Windows
         "C:/Windows/Fonts/msgothic.ttc",
@@ -34,9 +60,13 @@ def register_japanese_font():
         "C:/Windows/Fonts/YuGothM.ttc",
         # プロジェクト内
         os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "NotoSansJP-Regular.ttf"),
-        # Linux/Mac
+        # Linux
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        # Mac
         "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+        "/Library/Fonts/Arial Unicode.ttf",
     ]
 
     for font_path in font_paths:
@@ -47,7 +77,16 @@ def register_japanese_font():
             except Exception:
                 continue
 
-    # フォントが見つからない場合はデフォルトを使用
+    # ローカルにフォントがない場合はダウンロード
+    downloaded_font = download_noto_sans_jp()
+    if downloaded_font:
+        try:
+            pdfmetrics.registerFont(TTFont("JapaneseFont", downloaded_font))
+            return "JapaneseFont"
+        except Exception:
+            pass
+
+    # フォントが見つからない場合はデフォルトを使用（文字化けする可能性あり）
     return "Helvetica"
 
 
@@ -142,17 +181,17 @@ def generate_pdf_report(
         styles['JapaneseBody']
     ))
 
-    # スコアテーブル
+    # スコアテーブル（星をスコア数字に変更して文字化け回避）
     score_data = [
         ['評価項目', '自店舗'] + [f"競合{i+1}" for i in range(len(competitor_data))],
-        ['集客力', _score_stars(my_salon_data.get('pv', 0))] +
-        [_score_stars(c.get('pv', 0)) for c in competitor_data],
-        ['予約力', _score_stars(my_salon_data.get('cv', 0))] +
-        [_score_stars(c.get('cv', 0)) for c in competitor_data],
-        ['価格競争力', _score_stars(my_salon_data.get('price', 0))] +
-        [_score_stars(c.get('price', 0)) for c in competitor_data],
-        ['差別化', _score_stars(my_salon_data.get('diff', 0))] +
-        [_score_stars(c.get('diff', 0)) for c in competitor_data],
+        ['集客力', f"{my_salon_data.get('pv', 0)}/5"] +
+        [f"{c.get('pv', 0)}/5" for c in competitor_data],
+        ['予約力', f"{my_salon_data.get('cv', 0)}/5"] +
+        [f"{c.get('cv', 0)}/5" for c in competitor_data],
+        ['価格競争力', f"{my_salon_data.get('price', 0)}/5"] +
+        [f"{c.get('price', 0)}/5" for c in competitor_data],
+        ['差別化', f"{my_salon_data.get('diff', 0)}/5"] +
+        [f"{c.get('diff', 0)}/5" for c in competitor_data],
         ['総合スコア', f"{my_salon_data.get('total', 0):.1f}/5"] +
         [f"{c.get('total', 0):.1f}/5" for c in competitor_data],
     ]
@@ -201,7 +240,9 @@ def generate_pdf_report(
             elif line.startswith('#'):
                 continue  # 大見出しはスキップ
             else:
-                story.append(Paragraph(line, styles['JapaneseBody']))
+                # 特殊文字を置換して文字化け回避
+                clean_line = line.replace('★', '[*]').replace('☆', '[ ]')
+                story.append(Paragraph(clean_line, styles['JapaneseBody']))
 
     # 改善提案
     story.append(PageBreak())
@@ -218,13 +259,13 @@ def generate_pdf_report(
         story.append(Spacer(1, 5*mm))
         story.append(Paragraph("自店舗の強み", styles['JapaneseHeading']))
         for s in my_salon_data['strengths']:
-            story.append(Paragraph(f"・{s}", styles['JapaneseBody']))
+            story.append(Paragraph(f"- {s}", styles['JapaneseBody']))
 
     if my_salon_data.get('weaknesses'):
         story.append(Spacer(1, 5*mm))
         story.append(Paragraph("改善が必要な点", styles['JapaneseHeading']))
         for w in my_salon_data['weaknesses']:
-            story.append(Paragraph(f"・{w}", styles['JapaneseBody']))
+            story.append(Paragraph(f"- {w}", styles['JapaneseBody']))
 
     # フッター
     story.append(Spacer(1, 10*mm))
