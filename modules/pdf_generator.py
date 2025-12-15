@@ -60,10 +60,12 @@ def register_japanese_font():
         "C:/Windows/Fonts/YuGothM.ttc",
         # プロジェクト内
         os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "NotoSansJP-Regular.ttf"),
-        # Linux
+        # Linux (Streamlit Cloud - fonts-noto-cjk package)
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
         # Mac
         "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
         "/Library/Fonts/Arial Unicode.ttf",
@@ -76,6 +78,20 @@ def register_japanese_font():
                 return "JapaneseFont"
             except Exception:
                 continue
+
+    # Linuxでfindコマンドを使ってNotoフォントを探す
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["find", "/usr/share/fonts", "-name", "*NotoSans*CJK*.otf", "-o", "-name", "*NotoSans*CJK*.ttf"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.stdout.strip():
+            font_path = result.stdout.strip().split('\n')[0]
+            pdfmetrics.registerFont(TTFont("JapaneseFont", font_path))
+            return "JapaneseFont"
+    except Exception:
+        pass
 
     # ローカルにフォントがない場合はダウンロード
     downloaded_font = download_noto_sans_jp()

@@ -108,6 +108,33 @@ st.markdown("""
         font-size: 16px !important;
     }
 
+    /* ダウンロードボタン共通 */
+    .stDownloadButton > button {
+        width: 100%;
+        min-height: 48px;
+        font-size: 16px;
+        font-weight: bold;
+        border-radius: 8px;
+    }
+
+    /* PDFダウンロードボタン（プライマリ） */
+    .stDownloadButton > button[kind="primary"] {
+        background-color: #FF6B6B !important;
+        color: white !important;
+        border: none !important;
+    }
+
+    /* テキストダウンロードボタン（セカンダリ：グレー背景白文字） */
+    .stDownloadButton > button[kind="secondary"] {
+        background-color: #6c757d !important;
+        color: white !important;
+        border: none !important;
+    }
+
+    .stDownloadButton > button[kind="secondary"]:hover {
+        background-color: #5a6268 !important;
+    }
+
     /* スマホ横スクロール防止 */
     @media (max-width: 768px) {
         .main .block-container {
@@ -649,7 +676,8 @@ def render_report_tab(result: ComparisonResult):
         file_name="hpb_analysis_report.txt",
         mime="text/plain",
         use_container_width=True,
-        key="text_download"
+        key="text_download",
+        type="secondary"
     )
 
     # 比較サマリー表示
