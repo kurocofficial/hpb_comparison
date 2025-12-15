@@ -500,6 +500,7 @@ def render_report_tab(result: ComparisonResult):
     my = result.my_salon
     my_salon_data = {
         'name': my.name,
+        'url': my.url,
         'pv': my.pv_score,
         'cv': my.cv_score,
         'price': my.price_score,
@@ -507,6 +508,11 @@ def render_report_tab(result: ComparisonResult):
         'total': my.total_score,
         'strengths': my.strengths,
         'weaknesses': my.weaknesses,
+        'improvements': my.improvements,
+        'pv_details': my.pv_details or [],
+        'cv_details': my.cv_details or [],
+        'price_details': my.price_details or [],
+        'diff_details': my.diff_details or [],
     }
 
     competitor_data = [{
@@ -519,11 +525,39 @@ def render_report_tab(result: ComparisonResult):
     } for c in result.competitors]
 
     try:
+        # グラフを画像化
+        my_scores = {
+            'name': my.name,
+            'pv': my.pv_score,
+            'cv': my.cv_score,
+            'price': my.price_score,
+            'diff': my.diff_score,
+            'total': my.total_score
+        }
+        comp_scores = competitor_data
+
+        radar_image = None
+        bar_image = None
+
+        try:
+            radar_fig = create_radar_chart(my_scores, comp_scores)
+            radar_image = radar_fig.to_image(format="png", width=800, height=500)
+        except Exception:
+            pass
+
+        try:
+            bar_fig = create_comparison_bar_chart(my_scores, comp_scores)
+            bar_image = bar_fig.to_image(format="png", width=800, height=400)
+        except Exception:
+            pass
+
         pdf_bytes = generate_pdf_report(
             my_salon_data=my_salon_data,
             competitor_data=competitor_data,
             comparison_summary=result.comparison_summary,
             recommendations=my.improvements[:5],
+            radar_chart_image=radar_image,
+            bar_chart_image=bar_image,
         )
 
         st.download_button(

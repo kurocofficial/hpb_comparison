@@ -6,7 +6,6 @@ ReportLabを使用して日本語対応PDFレポートを生成
 import io
 import os
 import urllib.request
-import zipfile
 import tempfile
 from datetime import datetime
 from typing import Optional
@@ -26,12 +25,57 @@ from reportlab.platypus import (
     TableStyle,
     Image,
     PageBreak,
+    KeepTogether,
 )
 
 
 # フォントキャッシュディレクトリ
 FONT_CACHE_DIR = Path(tempfile.gettempdir()) / "hpb_fonts"
 NOTO_SANS_JP_URL = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP-Regular.ttf"
+
+# 採点基準
+SCORING_CRITERIA = {
+    "pv": {
+        "name": "集客力",
+        "items": {
+            "1-1": "キャッチコピーが独自性あり",
+            "1-2": "メイン写真がプロ撮影レベル",
+            "1-3": "ギャラリー写真30枚以上",
+            "1-4": "口コミ3,000件以上",
+            "1-5": "口コミ評価4.9以上",
+        }
+    },
+    "cv": {
+        "name": "予約力",
+        "items": {
+            "2-1": "クーポン10種類以上・割引率40%以上",
+            "2-2": "強い緊急性訴求あり",
+            "2-3": "全メニューに詳細説明",
+            "2-4": "ビフォーアフター写真10組以上",
+            "2-5": "口コミ返信率80%以上",
+        }
+    },
+    "price": {
+        "name": "価格競争力",
+        "items": {
+            "3-1": "競合より20%以上安い",
+            "3-2": "初回割引50%以上",
+            "3-3": "セットメニュー3つ以上",
+            "3-4": "全メニュー税込・追加料金明記",
+            "3-5": "施術時間・内容が充実",
+        }
+    },
+    "diff": {
+        "name": "差別化",
+        "items": {
+            "4-1": "エリアで唯一/希少な専門性",
+            "4-2": "ターゲット層が具体的",
+            "4-3": "資格・受賞歴の権威性",
+            "4-4": "独自メニュー・技術",
+            "4-5": "メディア掲載・SNS1万人以上",
+        }
+    }
+}
 
 
 def download_noto_sans_jp() -> Optional[str]:
@@ -43,7 +87,6 @@ def download_noto_sans_jp() -> Optional[str]:
         if font_path.exists():
             return str(font_path)
 
-        # フォントをダウンロード
         urllib.request.urlretrieve(NOTO_SANS_JP_URL, font_path)
         return str(font_path)
     except Exception:
@@ -52,7 +95,6 @@ def download_noto_sans_jp() -> Optional[str]:
 
 def register_japanese_font():
     """日本語フォントを登録"""
-    # まずローカルのフォントを確認
     font_paths = [
         # Windows
         "C:/Windows/Fonts/msgothic.ttc",
@@ -102,7 +144,6 @@ def register_japanese_font():
         except Exception:
             pass
 
-    # フォントが見つからない場合はデフォルトを使用（文字化けする可能性あり）
     return "Helvetica"
 
 
@@ -146,80 +187,124 @@ def generate_pdf_report(
     styles.add(ParagraphStyle(
         name='JapaneseTitle',
         fontName=font_name,
-        fontSize=20,
-        leading=24,
-        alignment=1,  # CENTER
-        spaceAfter=10*mm
+        fontSize=22,
+        leading=28,
+        alignment=1,
+        spaceAfter=8*mm,
+        textColor=colors.HexColor('#333333')
+    ))
+    styles.add(ParagraphStyle(
+        name='JapaneseSubtitle',
+        fontName=font_name,
+        fontSize=12,
+        leading=16,
+        alignment=1,
+        spaceAfter=5*mm,
+        textColor=colors.HexColor('#666666')
     ))
     styles.add(ParagraphStyle(
         name='JapaneseHeading',
         fontName=font_name,
         fontSize=14,
         leading=18,
-        spaceBefore=8*mm,
+        spaceBefore=6*mm,
         spaceAfter=4*mm,
         textColor=colors.HexColor('#FF6B6B')
+    ))
+    styles.add(ParagraphStyle(
+        name='JapaneseHeading2',
+        fontName=font_name,
+        fontSize=12,
+        leading=16,
+        spaceBefore=4*mm,
+        spaceAfter=2*mm,
+        textColor=colors.HexColor('#333333')
     ))
     styles.add(ParagraphStyle(
         name='JapaneseBody',
         fontName=font_name,
         fontSize=10,
         leading=16,
-        spaceAfter=3*mm
+        spaceAfter=2*mm
     ))
     styles.add(ParagraphStyle(
         name='JapaneseSmall',
         fontName=font_name,
         fontSize=8,
-        leading=12
+        leading=12,
+        textColor=colors.HexColor('#666666')
+    ))
+    styles.add(ParagraphStyle(
+        name='CheckItem',
+        fontName=font_name,
+        fontSize=9,
+        leading=14,
+        leftIndent=10
     ))
 
-    # コンテンツ作成
     story = []
 
-    # タイトル
+    # ===== 表紙セクション =====
+    story.append(Spacer(1, 20*mm))
     story.append(Paragraph(
-        "ホットペッパービューティー分析レポート",
+        "HPB分析レポート",
         styles['JapaneseTitle']
     ))
-
-    # 作成日時
     story.append(Paragraph(
-        f"作成日: {datetime.now().strftime('%Y年%m月%d日 %H:%M')}",
-        styles['JapaneseSmall']
+        "ホットペッパービューティー サロン競合分析",
+        styles['JapaneseSubtitle']
     ))
-    story.append(Spacer(1, 5*mm))
+    story.append(Spacer(1, 10*mm))
 
-    # 自店舗情報
-    story.append(Paragraph("自店舗情報", styles['JapaneseHeading']))
+    # サロン情報
     story.append(Paragraph(
-        f"店舗名: {my_salon_data.get('name', '不明')}",
+        f"対象サロン: {my_salon_data.get('name', '不明')}",
         styles['JapaneseBody']
     ))
+    story.append(Paragraph(
+        f"作成日時: {datetime.now().strftime('%Y年%m月%d日 %H:%M')}",
+        styles['JapaneseSmall']
+    ))
+    story.append(Spacer(1, 10*mm))
 
-    # スコアテーブル（星をスコア数字に変更して文字化け回避）
+    # ===== 総合スコアセクション =====
+    story.append(Paragraph("総合評価", styles['JapaneseHeading']))
+
+    # 大きなスコア表示
+    total_score = my_salon_data.get('total', 0)
+    score_color = '#4CAF50' if total_score >= 4 else '#FF9800' if total_score >= 3 else '#F44336'
+
+    score_table_data = [
+        [Paragraph(f"<font size='28' color='{score_color}'><b>{total_score:.1f}</b></font><font size='14'>/5</font>", styles['JapaneseBody'])]
+    ]
+    score_display = Table(score_table_data, colWidths=[80*mm])
+    score_display.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOX', (0, 0), (-1, -1), 2, colors.HexColor(score_color)),
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f9f9f9')),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+    ]))
+    story.append(score_display)
+    story.append(Spacer(1, 5*mm))
+
+    # 4項目スコアテーブル
     score_data = [
-        ['評価項目', '自店舗'] + [f"競合{i+1}" for i in range(len(competitor_data))],
-        ['集客力', f"{my_salon_data.get('pv', 0)}/5"] +
-        [f"{c.get('pv', 0)}/5" for c in competitor_data],
-        ['予約力', f"{my_salon_data.get('cv', 0)}/5"] +
-        [f"{c.get('cv', 0)}/5" for c in competitor_data],
-        ['価格競争力', f"{my_salon_data.get('price', 0)}/5"] +
-        [f"{c.get('price', 0)}/5" for c in competitor_data],
-        ['差別化', f"{my_salon_data.get('diff', 0)}/5"] +
-        [f"{c.get('diff', 0)}/5" for c in competitor_data],
-        ['総合スコア', f"{my_salon_data.get('total', 0):.1f}/5"] +
-        [f"{c.get('total', 0):.1f}/5" for c in competitor_data],
+        ['評価項目', 'スコア', '評価'],
+        ['集客力', f"{my_salon_data.get('pv', 0)}/5", _get_rating_text(my_salon_data.get('pv', 0))],
+        ['予約力', f"{my_salon_data.get('cv', 0)}/5", _get_rating_text(my_salon_data.get('cv', 0))],
+        ['価格競争力', f"{my_salon_data.get('price', 0)}/5", _get_rating_text(my_salon_data.get('price', 0))],
+        ['差別化', f"{my_salon_data.get('diff', 0)}/5", _get_rating_text(my_salon_data.get('diff', 0))],
     ]
 
-    col_widths = [80] + [90] * (1 + len(competitor_data))
-    score_table = Table(score_data, colWidths=col_widths)
+    score_table = Table(score_data, colWidths=[60*mm, 40*mm, 60*mm])
     score_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#FF6B6B')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, -1), font_name),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ('TOPPADDING', (0, 0), (-1, -1), 8),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
@@ -228,65 +313,202 @@ def generate_pdf_report(
     story.append(score_table)
     story.append(Spacer(1, 8*mm))
 
-    # チャート画像
-    if radar_chart_image:
+    # ===== グラフセクション =====
+    if radar_chart_image or bar_chart_image:
         story.append(Paragraph("評価チャート", styles['JapaneseHeading']))
-        img = Image(io.BytesIO(radar_chart_image), width=160*mm, height=100*mm)
-        story.append(img)
-        story.append(Spacer(1, 5*mm))
 
-    if bar_chart_image:
-        img = Image(io.BytesIO(bar_chart_image), width=160*mm, height=90*mm)
-        story.append(img)
+        if radar_chart_image:
+            try:
+                img = Image(io.BytesIO(radar_chart_image), width=160*mm, height=100*mm)
+                story.append(img)
+                story.append(Spacer(1, 5*mm))
+            except Exception:
+                pass
+
+        if bar_chart_image:
+            try:
+                img = Image(io.BytesIO(bar_chart_image), width=160*mm, height=80*mm)
+                story.append(img)
+                story.append(Spacer(1, 5*mm))
+            except Exception:
+                pass
+
+    # ===== 採点詳細セクション =====
+    story.append(PageBreak())
+    story.append(Paragraph("採点詳細", styles['JapaneseHeading']))
+    story.append(Paragraph(
+        "各項目の評価基準と判定結果です。チェックが多いほど高評価となります。",
+        styles['JapaneseSmall']
+    ))
+    story.append(Spacer(1, 3*mm))
+
+    score_details = {
+        "pv": my_salon_data.get('pv_details', []),
+        "cv": my_salon_data.get('cv_details', []),
+        "price": my_salon_data.get('price_details', []),
+        "diff": my_salon_data.get('diff_details', []),
+    }
+
+    for key, criteria in SCORING_CRITERIA.items():
+        details = score_details.get(key, [])
+        score = my_salon_data.get(key, 0)
+
+        # カテゴリヘッダー
+        story.append(Paragraph(
+            f"{criteria['name']} ({score}/5点)",
+            styles['JapaneseHeading2']
+        ))
+
+        # チェック項目テーブル
+        check_data = []
+        for item_id, item_label in criteria["items"].items():
+            is_checked = item_id in details
+            mark = "○" if is_checked else "×"
+            mark_color = '#4CAF50' if is_checked else '#999999'
+            check_data.append([
+                Paragraph(f"<font color='{mark_color}'><b>{mark}</b></font>", styles['CheckItem']),
+                Paragraph(item_label, styles['CheckItem'])
+            ])
+
+        check_table = Table(check_data, colWidths=[15*mm, 150*mm])
+        check_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(check_table)
+        story.append(Spacer(1, 3*mm))
+
+    # ===== 競合比較セクション =====
+    if competitor_data:
+        story.append(PageBreak())
+        story.append(Paragraph("競合比較", styles['JapaneseHeading']))
+
+        # 比較テーブル
+        comp_header = ['評価項目', my_salon_data.get('name', '自店舗')[:10]]
+        for i, c in enumerate(competitor_data):
+            comp_header.append(c.get('name', f'競合{i+1}')[:10])
+
+        comp_data = [comp_header]
+
+        for key, label in [('pv', '集客力'), ('cv', '予約力'), ('price', '価格競争力'), ('diff', '差別化'), ('total', '総合')]:
+            row = [label]
+            my_val = my_salon_data.get(key, 0)
+            if key == 'total':
+                row.append(f"{my_val:.1f}")
+            else:
+                row.append(str(my_val))
+
+            for c in competitor_data:
+                c_val = c.get(key, 0)
+                if key == 'total':
+                    row.append(f"{c_val:.1f}")
+                else:
+                    row.append(str(c_val))
+            comp_data.append(row)
+
+        col_widths = [40*mm] + [35*mm] * (1 + len(competitor_data))
+        comp_table = Table(comp_data, colWidths=col_widths)
+        comp_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#FF6B6B')),
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f0f0f0')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, -1), font_name),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(comp_table)
         story.append(Spacer(1, 8*mm))
 
-    # 比較サマリー
-    story.append(Paragraph("比較分析", styles['JapaneseHeading']))
+    # ===== 強み・弱みセクション =====
+    story.append(Paragraph("強み・弱み分析", styles['JapaneseHeading']))
 
-    # サマリーを段落ごとに分割
-    summary_lines = comparison_summary.split('\n')
-    for line in summary_lines:
-        if line.strip():
-            # マークダウンの見出しを処理
-            if line.startswith('###'):
-                story.append(Paragraph(
-                    line.replace('###', '').strip(),
-                    styles['JapaneseHeading']
-                ))
-            elif line.startswith('#'):
-                continue  # 大見出しはスキップ
-            else:
-                # 特殊文字を置換して文字化け回避
-                clean_line = line.replace('★', '[*]').replace('☆', '[ ]')
-                story.append(Paragraph(clean_line, styles['JapaneseBody']))
+    col_data = []
+    strengths = my_salon_data.get('strengths', [])[:5]
+    weaknesses = my_salon_data.get('weaknesses', [])[:5]
 
-    # 改善提案
-    story.append(PageBreak())
+    max_len = max(len(strengths), len(weaknesses))
+
+    strength_header = Paragraph("<b>強み</b>", styles['JapaneseBody'])
+    weakness_header = Paragraph("<b>改善点</b>", styles['JapaneseBody'])
+    col_data.append([strength_header, weakness_header])
+
+    for i in range(max_len):
+        s = strengths[i] if i < len(strengths) else ""
+        w = weaknesses[i] if i < len(weaknesses) else ""
+        col_data.append([
+            Paragraph(f"+ {s}" if s else "", styles['JapaneseSmall']),
+            Paragraph(f"- {w}" if w else "", styles['JapaneseSmall'])
+        ])
+
+    sw_table = Table(col_data, colWidths=[85*mm, 85*mm])
+    sw_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, 0), colors.HexColor('#E8F5E9')),
+        ('BACKGROUND', (1, 0), (1, 0), colors.HexColor('#FFEBEE')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('FONTNAME', (0, 0), (-1, -1), font_name),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.grey),
+    ]))
+    story.append(sw_table)
+    story.append(Spacer(1, 8*mm))
+
+    # ===== 改善提案セクション =====
     story.append(Paragraph("改善提案", styles['JapaneseHeading']))
+    story.append(Paragraph(
+        "優先度の高い順に改善施策を提案します。",
+        styles['JapaneseSmall']
+    ))
+    story.append(Spacer(1, 3*mm))
 
-    for i, rec in enumerate(recommendations, 1):
+    improvements = my_salon_data.get('improvements', recommendations)[:5]
+    for i, imp in enumerate(improvements, 1):
+        priority_color = '#F44336' if i == 1 else '#FF9800' if i == 2 else '#4CAF50'
         story.append(Paragraph(
-            f"{i}. {rec}",
+            f"<font color='{priority_color}'><b>{i}.</b></font> {imp}",
             styles['JapaneseBody']
         ))
 
-    # 自店舗の強み・弱み
-    if my_salon_data.get('strengths'):
-        story.append(Spacer(1, 5*mm))
-        story.append(Paragraph("自店舗の強み", styles['JapaneseHeading']))
-        for s in my_salon_data['strengths']:
-            story.append(Paragraph(f"- {s}", styles['JapaneseBody']))
+    # ===== 比較分析サマリー =====
+    if comparison_summary:
+        story.append(PageBreak())
+        story.append(Paragraph("比較分析サマリー", styles['JapaneseHeading']))
 
-    if my_salon_data.get('weaknesses'):
-        story.append(Spacer(1, 5*mm))
-        story.append(Paragraph("改善が必要な点", styles['JapaneseHeading']))
-        for w in my_salon_data['weaknesses']:
-            story.append(Paragraph(f"- {w}", styles['JapaneseBody']))
+        summary_lines = comparison_summary.split('\n')
+        for line in summary_lines:
+            if line.strip():
+                if line.startswith('###'):
+                    story.append(Paragraph(
+                        line.replace('###', '').strip(),
+                        styles['JapaneseHeading2']
+                    ))
+                elif line.startswith('#'):
+                    continue
+                else:
+                    clean_line = line.replace('★', '[*]').replace('☆', '[ ]')
+                    story.append(Paragraph(clean_line, styles['JapaneseBody']))
 
-    # フッター
-    story.append(Spacer(1, 10*mm))
+    # ===== フッター =====
+    story.append(Spacer(1, 15*mm))
+    story.append(Paragraph(
+        "---",
+        styles['JapaneseSmall']
+    ))
     story.append(Paragraph(
         "このレポートはAIによる自動分析です。参考情報としてご活用ください。",
+        styles['JapaneseSmall']
+    ))
+    story.append(Paragraph(
+        "Generated by HPB分析ツール",
         styles['JapaneseSmall']
     ))
 
@@ -294,6 +516,20 @@ def generate_pdf_report(
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def _get_rating_text(score: int) -> str:
+    """スコアから評価テキストを取得"""
+    if score >= 5:
+        return "非常に優れている"
+    elif score >= 4:
+        return "優れている"
+    elif score >= 3:
+        return "平均的"
+    elif score >= 2:
+        return "改善が必要"
+    else:
+        return "要重点改善"
 
 
 def _score_stars(score: int) -> str:
