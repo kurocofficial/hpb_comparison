@@ -311,19 +311,20 @@ def create_age_bar_chart(age_ratio: dict) -> go.Figure:
     fig.update_layout(
         title=dict(
             text='年代比率（女性）',
-            font=dict(size=16),
-            x=0.5
+            font=dict(size=14),
+            x=0.5,
+            y=0.95
         ),
         xaxis=dict(
             title='割合（%）',
-            range=[0, max(values) * 1.2 if values else 50],
+            range=[0, max(values) * 1.3 if values else 50],
             ticksuffix='%'
         ),
         yaxis=dict(
             autorange='reversed'
         ),
-        margin=dict(l=60, r=40, t=50, b=40),
-        height=250
+        margin=dict(l=60, r=50, t=60, b=40),
+        height=280
     )
 
     return fig

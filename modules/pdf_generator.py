@@ -95,6 +95,22 @@ def download_noto_sans_jp() -> Optional[str]:
 
 def register_japanese_font():
     """日本語フォントを登録"""
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+
+    # まずCIDフォント（埋め込み不要で確実に動作）を試す
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont('HeiseiKakuGo-W5'))
+        return 'HeiseiKakuGo-W5'
+    except Exception:
+        pass
+
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3'))
+        return 'HeiseiMin-W3'
+    except Exception:
+        pass
+
+    # TTFフォントを試す
     font_paths = [
         # Windows
         "C:/Windows/Fonts/msgothic.ttc",
