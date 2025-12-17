@@ -61,7 +61,7 @@ SCORING_CRITERIA = {
             "3-1": "競合より20%以上安い",
             "3-2": "初回割引50%以上",
             "3-3": "セットメニュー3つ以上",
-            "3-4": "全メニュー税込・追加料金明記",
+            "3-4": "追加料金・オプション料金の明記",
             "3-5": "施術時間・内容が充実",
         }
     },
@@ -154,6 +154,8 @@ def generate_pdf_report(
     recommendations: list[str],
     radar_chart_image: Optional[bytes] = None,
     bar_chart_image: Optional[bytes] = None,
+    gender_ratio: Optional[dict] = None,
+    age_ratio: Optional[dict] = None,
 ) -> bytes:
     """
     PDFレポートを生成
@@ -165,6 +167,8 @@ def generate_pdf_report(
         recommendations: 改善提案リスト
         radar_chart_image: レーダーチャート画像（PNG bytes）
         bar_chart_image: バーチャート画像（PNG bytes）
+        gender_ratio: 性別比率データ {"female": 73, "male": 26, "other": 0}
+        age_ratio: 年代比率データ {"under_10s": 5, "20s": 33, ...}
 
     Returns:
         bytes: PDFデータ
@@ -380,6 +384,67 @@ def generate_pdf_report(
         ]))
         story.append(check_table)
         story.append(Spacer(1, 3*mm))
+
+    # ===== 予約比率セクション =====
+    if gender_ratio or age_ratio:
+        story.append(Spacer(1, 5*mm))
+        story.append(Paragraph("予約比率", styles['JapaneseHeading']))
+        story.append(Paragraph(
+            "直近3カ月のネット予約データに基づく顧客層の分析です。",
+            styles['JapaneseSmall']
+        ))
+        story.append(Spacer(1, 3*mm))
+
+        ratio_data = []
+
+        if gender_ratio:
+            story.append(Paragraph("性別比率", styles['JapaneseHeading2']))
+            gender_table_data = [
+                ['女性', '男性', 'その他'],
+                [
+                    f"{gender_ratio.get('female', 0)}%",
+                    f"{gender_ratio.get('male', 0)}%",
+                    f"{gender_ratio.get('other', 0)}%"
+                ]
+            ]
+            gender_table = Table(gender_table_data, colWidths=[50*mm, 50*mm, 50*mm])
+            gender_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#FF9999')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, -1), font_name),
+                ('FONTSIZE', (0, 0), (-1, -1), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            story.append(gender_table)
+            story.append(Spacer(1, 5*mm))
+
+        if age_ratio:
+            story.append(Paragraph("年代比率（女性）", styles['JapaneseHeading2']))
+            age_table_data = [
+                ['〜10代', '20代', '30代', '40代', '50代〜'],
+                [
+                    f"{age_ratio.get('under_10s', 0)}%",
+                    f"{age_ratio.get('20s', 0)}%",
+                    f"{age_ratio.get('30s', 0)}%",
+                    f"{age_ratio.get('40s', 0)}%",
+                    f"{age_ratio.get('50s_plus', 0)}%"
+                ]
+            ]
+            age_table = Table(age_table_data, colWidths=[32*mm, 32*mm, 32*mm, 32*mm, 32*mm])
+            age_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#FFB3BA')),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, -1), font_name),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ]))
+            story.append(age_table)
+            story.append(Spacer(1, 5*mm))
 
     # ===== 競合比較セクション =====
     if competitor_data:

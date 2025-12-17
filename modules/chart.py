@@ -235,6 +235,100 @@ def create_total_score_gauge(score: float, name: str = "総合スコア") -> go.
     return fig
 
 
+def create_gender_pie_chart(gender_ratio: dict) -> go.Figure:
+    """
+    性別比率の円グラフを生成
+
+    Args:
+        gender_ratio: {"female": 73, "male": 26, "other": 0}
+
+    Returns:
+        go.Figure: Plotlyフィギュア
+    """
+    labels = ['女性', '男性', 'その他']
+    values = [
+        gender_ratio.get('female', 0),
+        gender_ratio.get('male', 0),
+        gender_ratio.get('other', 0)
+    ]
+    colors = ['#FF9999', '#66B2FF', '#C0C0C0']
+
+    fig = go.Figure(data=[go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.4,
+        marker=dict(colors=colors),
+        textinfo='label+text',
+        text=[f'{v}%' for v in values],
+        textfont=dict(size=12),
+        hovertemplate='%{label}: %{text}<extra></extra>'
+    )])
+
+    fig.update_layout(
+        title=dict(
+            text='性別比率',
+            font=dict(size=16),
+            x=0.5
+        ),
+        showlegend=False,
+        margin=dict(l=20, r=20, t=50, b=20),
+        height=250
+    )
+
+    return fig
+
+
+def create_age_bar_chart(age_ratio: dict) -> go.Figure:
+    """
+    年代比率の横棒グラフを生成
+
+    Args:
+        age_ratio: {"under_10s": 5, "20s": 33, "30s": 28, "40s": 19, "50s_plus": 15}
+
+    Returns:
+        go.Figure: Plotlyフィギュア
+    """
+    labels = ['〜10代', '20代', '30代', '40代', '50代〜']
+    values = [
+        age_ratio.get('under_10s', 0),
+        age_ratio.get('20s', 0),
+        age_ratio.get('30s', 0),
+        age_ratio.get('40s', 0),
+        age_ratio.get('50s_plus', 0)
+    ]
+    colors = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF']
+
+    fig = go.Figure(data=[go.Bar(
+        x=values,
+        y=labels,
+        orientation='h',
+        marker=dict(color=colors),
+        text=[f'{v}%' for v in values],
+        textposition='outside',
+        hovertemplate='%{y}: %{x}%<extra></extra>'
+    )])
+
+    fig.update_layout(
+        title=dict(
+            text='年代比率（女性）',
+            font=dict(size=16),
+            x=0.5
+        ),
+        xaxis=dict(
+            title='割合（%）',
+            range=[0, max(values) * 1.2 if values else 50],
+            ticksuffix='%'
+        ),
+        yaxis=dict(
+            autorange='reversed'
+        ),
+        margin=dict(l=60, r=40, t=50, b=40),
+        height=250
+    )
+
+    return fig
+
+
 def create_score_summary_cards(
     my_salon_scores: dict,
     competitor_scores: list[dict] = None

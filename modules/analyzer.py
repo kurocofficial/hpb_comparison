@@ -37,6 +37,9 @@ class SalonScore:
     cv_details: list[str] = None
     price_details: list[str] = None
     diff_details: list[str] = None
+    # 予約比率（男女比・年齢層）
+    gender_ratio: dict = None  # {"female": 73, "male": 26, "other": 0}
+    age_ratio: dict = None  # {"under_10s": 5, "20s": 33, "30s": 28, "40s": 19, "50s_plus": 15}
 
 
 @dataclass
@@ -191,21 +194,23 @@ class HPBAnalyzer:
             try:
                 data = json.loads(json_match.group(1))
                 return SalonScore(
-                    name=data.get("name", "不明"),
+                    name=data.get("name") or "不明",
                     url=url,
-                    pv_score=int(data.get("pv_score", 3)),
-                    cv_score=int(data.get("cv_score", 3)),
-                    price_score=int(data.get("price_score", 3)),
-                    diff_score=int(data.get("diff_score", 3)),
-                    total_score=float(data.get("total_score", 3.0)),
-                    strengths=data.get("strengths", []),
-                    weaknesses=data.get("weaknesses", []),
-                    improvements=data.get("improvements", []),
+                    pv_score=int(data.get("pv_score") or 3),
+                    cv_score=int(data.get("cv_score") or 3),
+                    price_score=int(data.get("price_score") or 3),
+                    diff_score=int(data.get("diff_score") or 3),
+                    total_score=float(data.get("total_score") or 3.0),
+                    strengths=data.get("strengths") or [],
+                    weaknesses=data.get("weaknesses") or [],
+                    improvements=data.get("improvements") or [],
                     raw_analysis=response_text,
-                    pv_details=data.get("pv_details", []),
-                    cv_details=data.get("cv_details", []),
-                    price_details=data.get("price_details", []),
-                    diff_details=data.get("diff_details", [])
+                    pv_details=data.get("pv_details") or [],
+                    cv_details=data.get("cv_details") or [],
+                    price_details=data.get("price_details") or [],
+                    diff_details=data.get("diff_details") or [],
+                    gender_ratio=data.get("gender_ratio"),
+                    age_ratio=data.get("age_ratio")
                 )
             except (json.JSONDecodeError, KeyError, ValueError):
                 pass

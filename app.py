@@ -5,6 +5,8 @@ HPB分析ツール - メインアプリケーション
 
 import os
 import sys
+import csv
+import random
 from pathlib import Path
 
 import streamlit as st
@@ -17,8 +19,45 @@ from modules.chart import (
     create_radar_chart,
     create_comparison_bar_chart,
     create_total_score_gauge,
+    create_gender_pie_chart,
+    create_age_bar_chart,
 )
 from modules.pdf_generator import generate_pdf_report
+
+# YouTube動画の設定
+YOUTUBE_CSV_PATH = Path(__file__).parent / "videos" / "美容サロン経営カレッジ.csv"
+
+
+def load_youtube_videos() -> list[dict]:
+    """CSVからYouTube動画リストを読み込む"""
+    videos = []
+    try:
+        with open(YOUTUBE_CSV_PATH, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get('リンク'):
+                    videos.append({
+                        'title': row.get('タイトル', ''),
+                        'url': row['リンク']
+                    })
+    except Exception:
+        pass
+    return videos
+
+
+def extract_youtube_id(url: str) -> str | None:
+    """YouTubeのURLから動画IDを抽出"""
+    import re
+    # youtu.be/VIDEO_ID 形式
+    match = re.search(r'youtu\.be/([a-zA-Z0-9_-]+)', url)
+    if match:
+        return match.group(1)
+    # youtube.com/watch?v=VIDEO_ID 形式
+    match = re.search(r'youtube\.com/watch\?v=([a-zA-Z0-9_-]+)', url)
+    if match:
+        return match.group(1)
+    return None
+
 
 # ページ設定
 st.set_page_config(
@@ -158,6 +197,8 @@ def init_session_state():
         st.session_state.analysis_context = ""
     if 'chat_history' not in st.session_state:
         st.session_state.chat_history = []
+    if 'last_video' not in st.session_state:
+        st.session_state.last_video = None
 
 
 def get_api_key() -> str:
@@ -228,27 +269,63 @@ def run_analysis(my_url: str, competitor_urls: list[str]):
     # 有効な競合URLのみ抽出
     valid_competitors = [url for url in competitor_urls if url and url.strip()]
 
+    # YouTube動画を読み込み
+    videos = load_youtube_videos()
+    selected_video = None  # 選択した動画を保持
+
     try:
-        with st.spinner("分析中... しばらくお待ちください（2-3分程度かかります）"):
-            progress = st.progress(0)
-            status = st.empty()
+        # 分析中メッセージとプログレスバー
+        st.info("🔍 分析中... しばらくお待ちください（2-3分程度かかります）")
+        progress = st.progress(0)
+        status = st.empty()
 
-            status.text("🔄 APIに接続中...")
-            progress.progress(10)
+        # 待機中にYouTube動画を表示
+        if videos:
+            st.markdown("---")
+            st.markdown("**📺 お待ちの間、サロン経営のヒントをどうぞ**")
 
-            analyzer = HPBAnalyzer(api_key)
+            # HPB関連動画を優先、なければランダム選択
+            hpb_videos = [v for v in videos if 'ホットペッパー' in v['title'] or 'HPB' in v['title'].upper()]
+            if hpb_videos:
+                selected_video = random.choice(hpb_videos)
+            else:
+                selected_video = random.choice(videos)
+            video_id = extract_youtube_id(selected_video['url'])
 
-            status.text("📊 自店舗を分析中...")
-            progress.progress(30)
+            if video_id:
+                st.markdown(f"**{selected_video['title']}**")
+                # YouTube埋め込みプレーヤー（自動再生・ミュート開始）
+                youtube_embed = f'''
+                <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px;">
+                    <iframe
+                        src="https://www.youtube.com/embed/{video_id}?autoplay=1&mute=1&rel=0"
+                        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; border-radius: 12px;"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen>
+                    </iframe>
+                </div>
+                <p style="font-size: 12px; color: #666; margin-top: 8px;">※ 音声はミュート状態で開始します。動画内のスピーカーボタンで音声ONにできます</p>
+                '''
+                st.markdown(youtube_embed, unsafe_allow_html=True)
+                st.markdown("")
 
-            result = analyzer.compare_salons(my_url, valid_competitors)
+        status.text("🔄 APIに接続中...")
+        progress.progress(10)
 
-            progress.progress(100)
-            status.text("✅ 分析完了!")
+        analyzer = HPBAnalyzer(api_key)
+
+        status.text("📊 自店舗を分析中...")
+        progress.progress(30)
+
+        result = analyzer.compare_salons(my_url, valid_competitors)
+
+        progress.progress(100)
+        status.text("✅ 分析完了!")
 
         # 結果を保存
         st.session_state.analysis_result = result
         st.session_state.analysis_context = _build_context(result)
+        st.session_state.last_video = selected_video  # 動画情報も保存
 
         st.rerun()
 
@@ -298,10 +375,11 @@ def render_result_page():
         if st.button("🔄 新規分析"):
             st.session_state.analysis_result = None
             st.session_state.chat_history = []
+            st.session_state.last_video = None
             st.rerun()
 
     # タブ
-    tab1, tab2, tab3 = st.tabs(["📈 スコア", "💬 AI相談", "📄 レポート"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📈 スコア", "💬 AI相談", "📄 レポート", "📺 YouTube"])
 
     with tab1:
         render_score_tab(result)
@@ -311,6 +389,9 @@ def render_result_page():
 
     with tab3:
         render_report_tab(result)
+
+    with tab4:
+        render_youtube_tab()
 
 
 def render_score_tab(result: ComparisonResult):
@@ -345,7 +426,7 @@ def render_score_tab(result: ComparisonResult):
                 "3-1": "競合より20%以上安い",
                 "3-2": "初回割引50%以上または高額特典",
                 "3-3": "セットメニュー3つ以上・30%以上お得",
-                "3-4": "全メニュー税込・追加料金明記",
+                "3-4": "追加料金・オプション料金の明記（価格透明性）",
                 "3-5": "施術時間・内容が競合より充実",
             }
         },
@@ -392,6 +473,27 @@ def render_score_tab(result: ComparisonResult):
                     st.markdown(f"✅ {item_label}")
                 else:
                     st.markdown(f"❌ {item_label}")
+
+    # 予約比率（男女比・年齢層）
+    if my_salon.gender_ratio or my_salon.age_ratio:
+        st.markdown('<div class="section-header">予約比率</div>', unsafe_allow_html=True)
+        st.markdown("*直近3カ月のネット予約データに基づく*")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if my_salon.gender_ratio:
+                gender_chart = create_gender_pie_chart(my_salon.gender_ratio)
+                st.plotly_chart(gender_chart, use_container_width=True)
+            else:
+                st.info("性別比率データなし")
+
+        with col2:
+            if my_salon.age_ratio:
+                age_chart = create_age_bar_chart(my_salon.age_ratio)
+                st.plotly_chart(age_chart, use_container_width=True)
+            else:
+                st.info("年代比率データなし")
 
     # 比較チャート
     if result.competitors:
@@ -558,6 +660,8 @@ def render_report_tab(result: ComparisonResult):
             recommendations=my.improvements[:5],
             radar_chart_image=radar_image,
             bar_chart_image=bar_image,
+            gender_ratio=my.gender_ratio,
+            age_ratio=my.age_ratio,
         )
 
         st.download_button(
@@ -634,7 +738,7 @@ def render_report_tab(result: ComparisonResult):
                     "3-1": "競合より20%以上安い",
                     "3-2": "初回割引50%以上",
                     "3-3": "セットメニュー3つ以上",
-                    "3-4": "全メニュー税込・追加料金明記",
+                    "3-4": "追加料金・オプション料金の明記",
                     "3-5": "施術時間・内容が充実",
                 }
             },
@@ -655,6 +759,30 @@ def render_report_tab(result: ComparisonResult):
             for item_id, item_label in cat_data["items"].items():
                 mark = "✓" if item_id in cat_data["details"] else "✗"
                 lines.append(f"    [{mark}] {item_label}")
+
+        # 予約比率
+        if my.gender_ratio or my.age_ratio:
+            lines.append("")
+            lines.append("-" * 50)
+            lines.append("【予約比率】")
+            lines.append("-" * 50)
+            lines.append("  ※直近3カ月のネット予約データに基づく")
+
+            if my.gender_ratio:
+                lines.append("")
+                lines.append("  《性別比率》")
+                lines.append(f"    女性: {my.gender_ratio.get('female', 0)}%")
+                lines.append(f"    男性: {my.gender_ratio.get('male', 0)}%")
+                lines.append(f"    その他: {my.gender_ratio.get('other', 0)}%")
+
+            if my.age_ratio:
+                lines.append("")
+                lines.append("  《年代比率（女性）》")
+                lines.append(f"    〜10代: {my.age_ratio.get('under_10s', 0)}%")
+                lines.append(f"    20代: {my.age_ratio.get('20s', 0)}%")
+                lines.append(f"    30代: {my.age_ratio.get('30s', 0)}%")
+                lines.append(f"    40代: {my.age_ratio.get('40s', 0)}%")
+                lines.append(f"    50代〜: {my.age_ratio.get('50s_plus', 0)}%")
 
         lines.append("")
         lines.append("-" * 50)
@@ -718,6 +846,69 @@ def render_report_tab(result: ComparisonResult):
     st.markdown("---")
     st.markdown("**比較分析サマリー**")
     st.markdown(result.comparison_summary)
+
+
+def render_youtube_tab():
+    """YouTubeタブをレンダリング"""
+    st.markdown('<div class="section-header">美容サロン経営カレッジ</div>', unsafe_allow_html=True)
+
+    # チャンネル情報
+    st.markdown("""
+    **サロン経営に役立つ動画チャンネル**
+
+    ホットペッパービューティーの活用法や集客のコツなど、
+    サロン経営に役立つ情報を発信しています。
+    """)
+
+    # 分析中に視聴していた動画をハイライト
+    if st.session_state.last_video:
+        st.markdown("---")
+        st.markdown("**▶ 先ほど視聴していた動画**")
+        video = st.session_state.last_video
+        video_id = extract_youtube_id(video['url'])
+        if video_id:
+            st.markdown(f"**{video['title']}**")
+            youtube_embed = f'''
+            <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px;">
+                <iframe
+                    src="https://www.youtube.com/embed/{video_id}?rel=0"
+                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; border-radius: 12px;"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen>
+                </iframe>
+            </div>
+            '''
+            st.markdown(youtube_embed, unsafe_allow_html=True)
+
+    # 全動画リスト
+    st.markdown("---")
+    st.markdown("**📋 動画一覧**")
+
+    videos = load_youtube_videos()
+    if videos:
+        for i, video in enumerate(videos, 1):
+            with st.expander(f"{i}. {video['title']}"):
+                video_id = extract_youtube_id(video['url'])
+                if video_id:
+                    youtube_embed = f'''
+                    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px;">
+                        <iframe
+                            src="https://www.youtube.com/embed/{video_id}?rel=0"
+                            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; border-radius: 12px;"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowfullscreen>
+                        </iframe>
+                    </div>
+                    '''
+                    st.markdown(youtube_embed, unsafe_allow_html=True)
+                st.markdown(f"[YouTubeで見る]({video['url']})")
+    else:
+        st.info("動画が見つかりませんでした")
+
+    # チャンネルリンク
+    st.markdown("---")
+    st.markdown("**🔗 チャンネル登録はこちら**")
+    st.markdown("[美容サロン経営カレッジ - YouTubeチャンネル](https://www.youtube.com/@biyou-salon)")
 
 
 def main():
